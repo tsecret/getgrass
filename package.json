@@ -1,0 +1,31 @@
+{
+  "name": "getgrass",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon src/main.ts",
+    "build": "tsc --build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/axios": "^0.14.0",
+    "@types/fake-useragent": "^1.0.0",
+    "@types/node": "^20.12.6",
+    "@types/uuid": "^9.0.8",
+    "@types/ws": "^8.5.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.4"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "dotenv": "^16.4.5",
+    "fake-useragent": "^1.0.1",
+    "socks-proxy-agent": "^8.0.3",
+    "uuid": "^9.0.1",
+    "ws": "^8.16.0"
+  }
+}

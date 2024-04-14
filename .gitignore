@@ -1,0 +1,22 @@
+# Distribution
+dist
+out
+build
+node_modules
+
+# Logs
+*.log*
+logs
+
+# Environment
+*.env*
+
+# Misc
+.DS_Storenod
+
+*.backup
+*.key
+.terraform
+*.tfstate
+*.tfvars
+docker-compose.yaml
