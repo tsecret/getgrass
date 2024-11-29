@@ -1,24 +1,26 @@
-import WebSocket from 'ws';
-import { SocksProxyAgent } from 'socks-proxy-agent';
+import axios from 'axios';
+import 'dotenv/config';
 import useragent from 'fake-useragent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import { v4 as uuid } from 'uuid';
-import 'dotenv/config'
-import { Device, Metrics, findDevice, getDevices, getUser, sendMetrics } from './api';
-
-
+import WebSocket from 'ws';
+import { getUser, getDevices, findDevice } from './api'
 
 const USER_ID = process.env.USER_ID
 const PROXY = process.env.PROXY
 const TOKEN = process.env.TOKEN
 
-const PING_INTERVAL_TIME = 30_000
+const PING_INTERVAL_TIME = 10_000
 const STATS_INTERVAL_TIME = 60_000
 
-const sleep = async () => {
+const sleep = async (ms: number = 2_000) => {
+    console.log(`Sleeping for ${ms}ms`)
     await new Promise(res => {
-        setTimeout(() => {res(true)}, 2_000)
+        setTimeout(() => {res(true)}, ms)
     })
 }
+
+const randomSleep = async () => sleep(Math.floor(Math.random() * 10) * 1000)
 
 class Farm {
     ws: WebSocket;
@@ -26,61 +28,55 @@ class Farm {
     deviceId = uuid();
     pingInterval: NodeJS.Timeout
     statsInterval: NodeJS.Timeout
-    agent = new SocksProxyAgent(`socks5://${PROXY}`);
+    agent = new SocksProxyAgent(PROXY);
+    hosts = ['wss://proxy2.wynd.network:4444', 'wss://proxy2.wynd.network:4650']
+    host = this.hosts[Math.floor(Math.random() * this.hosts.length)]
 
     scores: number[] = []
     points: number[] = []
 
     constructor(){
-        console.log('Connecting')
+      this.init()
+    }
 
-        this.ws = new WebSocket(
-            'wss://proxy.wynd.network:4650',
-            { headers: { 'user-agent': this.useragent }, agent: this.agent }
-        );
+    proxyCheck = async () => {
+      const res = await axios.get('https://ipinfo.io/json', { httpsAgent: this.agent, httpAgent: this.agent })
+      console.log('res.data', res.data)
+    }
 
-        this.ws.on('error', console.error);
+    init = async () => {
+      await randomSleep()
 
-        this.ws.on('open', async () => {
-            console.log('Connected')
+      const user = await getUser()
+      console.log(`Farming as ${user.email} || ${user.username} || ${user.userId}`)
 
-            const user = await getUser();
-            console.log(`User ${user.username} ${user.userId} ${user.email}`)
-        });
+      this.ws = new WebSocket(this.host, { headers: { 'user-agent': this.useragent }, agent: this.agent });
 
-        this.ws.on('message', this.handleMessage);
+      this.ws.on('error', console.error);
 
-        this.ws.on('close', async (_, reason: Buffer) => {
-            console.log("Closed due: %s", reason.toString() || 'No reason')
-            await this.close()
-        })
+      this.ws.on('open', async () => {
+          console.log('Connected')
+      });
 
-        this.ws.on('error',  (err) => {
-            console.log('ERROR', err.message)
-        })
+      this.ws.on('message', this.handleMessage);
 
-        process.on('exit', async () => {
-            console.log("Process exit")
-            this.ws.close()
-        });
+      this.ws.on('close', async (_, reason: Buffer) => {
+          console.log("Closed due: %s", reason.toString() || 'No reason')
+          await this.close()
+      })
 
-        process.on('SIGINT', async () => {
-            console.log("Process SIGINT")
-            this.ws.close()
-        });
+      this.pingInterval = setInterval(() => this.sendPing(), PING_INTERVAL_TIME)
+      this.statsInterval = setInterval(() => this.handleStats(), STATS_INTERVAL_TIME)
+    }
 
-        this.pingInterval = setInterval(() => {
-            const payload = {
-                id: uuid(),
-                version: '1.0.0',
-                action: 'PING',
-                data: {} 
-            }
-            this.sendMessage(payload)
-        }, PING_INTERVAL_TIME)
-        
-        this.statsInterval = setInterval(this.handleStats, STATS_INTERVAL_TIME)
-
+    sendPing = () => {
+      const payload = {
+        action: 'PING',
+        data: {},
+        id: uuid(),
+        version: '1.0.0',
+    }
+      this.sendMessage(payload)
     }
 
     sendMessage = (payload: any) => {
@@ -99,72 +95,49 @@ class Farm {
                 "origin_action": "AUTH",
                 "result": {
                     "browser_id": this.deviceId,
-                    "user_id": USER_ID,
-                    "user_agent": this.useragent,
-                    "timestamp": new Date().getTime(),
                     "device_type": "extension",
-                    "version": "2.5.0"
+                    "extension_id": "ilehaonighjijnmpnagapkhpcdbhclfg",
+                    "timestamp": Math.floor(Date.now() / 1000),
+                    "user_agent": this.useragent,
+                    "user_id": USER_ID,
+                    "version": "4.26.2"
                 }
             }
 
             this.sendMessage(payload)
+
+            this.sendPing()
+        }
+
+        if (message.action === 'PONG'){
+          const payload = {
+            id: message['id'],
+            origin_action: "PONG"
+          }
+
+          this.sendMessage(payload)
         }
 
     }
 
     handleStats = async () => {
-        let device: Device;
+      const device = findDevice(this.deviceId, await getDevices())
 
-        try{
-            const devices = await getDevices();
-            device = findDevice(this.deviceId, devices);
-        } catch (error){
+      if (!device){
+        console.log('No device found')
+        return
+      }
 
-        }
-        
-        if (!device){
-            console.log("No device found")
-            return
-        }
+      console.log(`Device ${device.ipAddress} has IP score ${device.ipScore}; x${device.multiplier} points`)
 
-        console.log(`Device IP: ${device.ipAddress}: Network score ${device.ipScore}%; Total points ${device.totalPoints}; Total uptime: ${device.totalUptime}`)
-
-        try {
-            const metrics: Metrics = {
-                userId: USER_ID,
-                totalPoints: device.totalPoints,
-                totalUptime: device.totalUptime,
-                ipScore: device.ipScore,
-                ipAddress: device.ipAddress
-            }
-            await sendMetrics(metrics)
-        } catch (error) {
-            console.warn('Could not send metrics')
-        }
-
-        this.scores.push(device.ipScore);
-        this.points.push(device.totalPoints);
-        
-        if (this.scores.length >= 2) {
-            if (device.ipScore <= 75){
-                console.log(`Device has low score`)
-                await this.close()
-            }
-
-            // if (device.totalPoints <= this.points[0]){
-            //     console.log(`Device not farming`)
-            //     await this.close()
-            // }
-
-            this.scores = []
-            this.points = []
-        }
+      if (device.ipScore < 75){
+        this.close(`IP score is ${device.ipScore}`)
+      }
 
     }
 
-    async close(){
-        console.log('Closing')
-        await sleep()
+    async close(reason: string = null) {
+        console.log('Closing', reason || null)
         process.exit(1)
     }
 }

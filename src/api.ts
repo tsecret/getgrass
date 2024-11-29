@@ -1,14 +1,14 @@
 import axios from 'axios'
 process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 
-
 export interface Device {
-    deviceId: string
-    ipScore: number
-    totalUptime: number
-    totalPoints: number
-    isConnected: boolean
-    ipAddress: string
+  aggUptime: number
+  ipAddress: string
+  ipScore: number
+  lastConnectedAt: Date
+  multiplier: number
+  userId: string
+  deviceId: string
 }
 
 export interface User {
@@ -26,13 +26,11 @@ export interface Metrics {
 }
 
 const headers = { 'authorization': process.env.TOKEN }
-const instance = axios.create({ headers, })
+const instance = axios.create({ headers })
 
 export const getDevices = async (): Promise<Device[]> => {
-    const params = { input: JSON.stringify({ limit: 100 }) }
-    const res = await instance.get('https://api.getgrass.io/devices', { params } )
-
-    return res.data.result.data.data
+    const res = await instance.get('https://api.getgrass.io/activeDevices' )
+    return res.data.result.data
 }
 
 export const findDevice = (deviceId: string, devices: Device[]) => {
@@ -40,9 +38,7 @@ export const findDevice = (deviceId: string, devices: Device[]) => {
 }
 
 export const getUser = async (): Promise<User> => {
-    const params = { input: JSON.stringify({ limit: 100 }) }
     const res = await instance.get('https://api.getgrass.io/retrieveUser')
-
     return res.data.result.data
 }
 
