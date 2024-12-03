@@ -8,10 +8,9 @@ import { getUser, getDevices, findDevice } from './api'
 
 const USER_ID = process.env.USER_ID
 const PROXY = process.env.PROXY
-const TOKEN = process.env.TOKEN
 
 const PING_INTERVAL_TIME = 10_000
-const STATS_INTERVAL_TIME = 60_000
+const STATS_INTERVAL_TIME = 5 * 60_000
 
 const sleep = async (ms: number = 2_000) => {
     console.log(`Sleeping for ${ms}ms`)
